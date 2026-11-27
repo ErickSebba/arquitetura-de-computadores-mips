@@ -103,6 +103,7 @@ begin
                 reg_a_to_ula <= reg_a_internal; -- disponibiliza A para a ULA
 
             when STORE_RAM =>
+                rom_addr     <= rt;             -- mantem B na ULA durante a escrita
                 ram_addr     <= rd;             -- endereco de escrita na RAM
                 ram_we       <= '1';            -- habilita escrita
                 reg_a_to_ula <= reg_a_internal;

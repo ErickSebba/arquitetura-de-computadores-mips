@@ -1,0 +1,2 @@
+# O relatorio em LaTeX nao conta como linguagem do repositorio
+*.tex linguist-documentation

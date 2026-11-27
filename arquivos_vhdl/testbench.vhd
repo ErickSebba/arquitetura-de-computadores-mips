@@ -1,4 +1,6 @@
--- Testbench para processador_top
+-- Testbench para processador_top (VHDL-2008)
+-- Cada operacao confere o valor gravado na RAM e a flag de overflow contra o valor esperado.
+-- Uma divergencia gera erro (severity error) e o resumo final falha (severity failure).
 library ieee;
 use ieee.std_logic_1164.all;
 use ieee.numeric_std.all;
@@ -25,6 +27,11 @@ architecture sim of tb_top is
     signal done        : std_logic;
 
     constant CLK_PERIOD : time := 10 ns;
+
+    -- Copia do que foi gravado na RAM, capturada na escrita (porta di/we/addr do DUT)
+    type ram_copia_t is array(0 to 31) of std_logic_vector(31 downto 0);
+    signal ram_copia : ram_copia_t := (others => (others => 'U'));
+    signal ovfl_na_escrita : std_logic := 'U';
 
     function make_rtype(rs, rt, rd, funct : integer)
         return std_logic_vector is
@@ -57,7 +64,21 @@ begin
 
     clk <= not clk after CLK_PERIOD / 2;
 
-    process
+    -- Monitor: registra cada escrita na RAM do DUT
+    monitor : process(clk)
+        alias we_x   is << signal .tb_top.DUT.ram_we_s   : std_logic >>;
+        alias addr_x is << signal .tb_top.DUT.ram_addr_s : std_logic_vector(4 downto 0) >>;
+        alias di_x   is << signal .tb_top.DUT.ram_di_s   : std_logic_vector(31 downto 0) >>;
+        alias ovfl_x is << signal .tb_top.DUT.ula_ovfl_s : std_logic >>;
+    begin
+        if rising_edge(clk) and we_x = '1' then
+            ram_copia(to_integer(unsigned(addr_x))) <= di_x;
+            ovfl_na_escrita <= ovfl_x;
+        end if;
+    end process;
+
+    estimulos : process
+        variable erros : natural := 0;
         procedure run_op(rs_i, rt_i, rd_i, funct_i : integer; op_str : string) is
             variable expected : integer;
         begin
@@ -70,12 +91,23 @@ begin
             start <= '1';
             wait until done = '1';
             wait for CLK_PERIOD;
-            report "[CHECKER] " & op_str &
-                   ": ROM[" & integer'image(rs_i) & "]=" & integer'image(ROM_VAL(rs_i)) &
-                   " op ROM[" & integer'image(rt_i) & "]=" & integer'image(ROM_VAL(rt_i)) &
-                   " => esperado=" & integer'image(expected) &
-                   " gravado em RAM[" & integer'image(rd_i) & "]"
-            severity note;
+            if ram_copia(rd_i) = std_logic_vector(to_signed(expected, 32))
+               and ovfl_na_escrita = '0' then
+                report "[OK]    " & op_str &
+                       ": ROM[" & integer'image(rs_i) & "]=" & integer'image(ROM_VAL(rs_i)) &
+                       " op ROM[" & integer'image(rt_i) & "]=" & integer'image(ROM_VAL(rt_i)) &
+                       " = " & integer'image(expected) &
+                       " em RAM[" & integer'image(rd_i) & "]"
+                severity note;
+            else
+                erros := erros + 1;
+                report "[FALHA] " & op_str &
+                       ": esperado " & integer'image(expected) &
+                       " em RAM[" & integer'image(rd_i) & "], gravado " &
+                       to_hstring(ram_copia(rd_i)) & ", overflow = " &
+                       std_logic'image(ovfl_na_escrita)
+                severity error;
+            end if;
             start <= '0';
             wait for 50 ns;
         end procedure;
@@ -92,7 +124,10 @@ begin
         run_op(9, 10, 11, 35, "SUBU    ");  -- 85 - 40  = 45
         run_op(5,  2, 12, 34, "SUB_NEG ");  -- 30 - 123 = -93
 
-        report "=== SIMULACAO CONCLUIDA ===" severity note;
+        assert erros = 0
+            report "=== " & integer'image(erros) & " operacao(oes) com resultado errado ==="
+            severity failure;
+        report "=== SIMULACAO CONCLUIDA: todas as operacoes conferem ===" severity note;
         wait;
     end process;
 

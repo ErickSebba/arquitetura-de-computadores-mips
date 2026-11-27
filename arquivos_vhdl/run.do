@@ -1,5 +1,5 @@
 vlib work
-vcom -2019 -dbg rom_32x32.vhd ram_32x32.vhd ula.vhd control_unit.vhd design.vhd testbench.vhd
+vcom -2019 -dbg rom_32x32.vhd ram_32x32.vhd ula.vhd control_unit.vhd processador_top.vhd testbench.vhd
 
 vsim +access+r work.tb_top
 
